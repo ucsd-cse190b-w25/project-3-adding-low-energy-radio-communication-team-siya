@@ -23,6 +23,24 @@
 
 #include <stdlib.h>
 
+#include <stdint.h>
+#include <stdio.h>
+#include <stdbool.h>
+/* Include memory map of our MCU */
+#include <stm32l475xx.h>
+
+/* Include LED driver */
+#include "leds.h"
+
+/* Include timer driver */
+#include "timer.h"
+
+/* Include i2c */
+#include "i2c.h"
+
+/* Include accelerometer */
+#include <lsm6dsl.h>
+
 int dataAvailable = 0;
 
 SPI_HandleTypeDef hspi3;
@@ -30,6 +48,89 @@ SPI_HandleTypeDef hspi3;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_SPI3_Init(void);
+
+#define CTRL1_XL      0x10
+#define THRESHOLD 1000000  // Min amount of change detected to be considered moving
+#define TIME_LIMIT 1200		// Set to 1200 so results in 1 minute taking into account a cycle is 50ms
+
+
+#if !defined(__SOFT_FP__) && defined(__ARM_FP)
+  #warning "FPU is not initialized, but the project is compiling for an FPU. Please initialize the FPU before use."
+#endif
+volatile uint8_t bit_index = 0;
+volatile uint8_t min_lost = 0;
+volatile uint16_t transmission_data[2] = {0x99, 0x23D5}; // Preamble + Student ID
+volatile uint8_t data_set_index = 0;
+
+volatile int cycles_still = 0;
+volatile bool lost = false;
+
+int16_t x, y, z;
+int16_t px, py, pz; // Previous accelerometer values
+
+// Concenates minutes the device has been in lost mode to the transmission to be displayed
+void update_transmission_data() {
+    transmission_data[1] = (0x23D5 & 0xFF00) | (min_lost & 0x00FF); // Preserve ID, update minutes lost
+}
+
+int cycles_to_minutes() {
+    return cycles_still / TIME_LIMIT;
+}
+
+void update_minutes_lost() {
+    min_lost = cycles_to_minutes();
+    update_transmission_data();
+}
+
+// Displaying pattern on LED lights when in lost mode
+void lost_mode() {
+    uint8_t current_bits = (transmission_data[data_set_index] >> (14 - (bit_index * 2))) & 0x03;
+    leds_set(current_bits);
+
+    bit_index++;
+    if (bit_index >= 8) {
+        bit_index = 0;
+        data_set_index = (data_set_index + 1) % 2;
+    }
+}
+
+void TIM2_IRQHandler() {
+    if (TIM2->SR & TIM_SR_UIF) {
+        TIM2->SR &= ~TIM_SR_UIF;
+
+        lsm6dsl_read_xyz(&x, &y, &z);
+
+        // Setting variance of x,y,z values
+        int vx = (x - px) * (x - px);
+        int vy = (y - py) * (y - py);
+        int vz = (z - pz) * (z - pz);
+
+        if (vx < THRESHOLD && vy < THRESHOLD && vz < THRESHOLD) {
+            cycles_still++;
+            if (cycles_still > TIME_LIMIT) {
+                lost = true;
+                update_minutes_lost();
+            }
+        } else {
+            cycles_still = 0;
+            lost = false;
+        }
+
+        px = x;
+        py = y;
+        pz = z;
+    }
+}
+
+// Redefine the libc _write() function so you can use printf in your code
+int _write(int file, char *ptr, int len) {
+	int i = 0;
+	for (i = 0; i < len; i++) {
+		ITM_SendChar(*ptr++);
+	}
+	return len;
+}
+
 
 /**
   * @brief  The application entry point.
