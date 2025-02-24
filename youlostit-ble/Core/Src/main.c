@@ -84,14 +84,19 @@ void update_minutes_lost() {
 
 // Displaying pattern on LED lights when in lost mode
 void lost_mode() {
-    uint8_t current_bits = (transmission_data[data_set_index] >> (14 - (bit_index * 2))) & 0x03;
-    leds_set(current_bits);
+//    uint8_t current_bits = (transmission_data[data_set_index] >> (14 - (bit_index * 2))) & 0x03;
+//    leds_set(current_bits);
+//
+//    bit_index++;
+//    if (bit_index >= 8) {
+//        bit_index = 0;
+//        data_set_index = (data_set_index + 1) % 2;
+//    }
+	if(cycles_still/20 % 10 == 0){
+		unsigned char test_str[] = "You are lost";
+		updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, sizeof(test_str)-1, test_str);
+	}
 
-    bit_index++;
-    if (bit_index >= 8) {
-        bit_index = 0;
-        data_set_index = (data_set_index + 1) % 2;
-    }
 }
 
 void TIM2_IRQHandler() {
@@ -159,18 +164,39 @@ int main(void)
 
   uint8_t nonDiscoverable = 0;
 
-  while (1)
-  {
-	  if(!nonDiscoverable && HAL_GPIO_ReadPin(BLE_INT_GPIO_Port,BLE_INT_Pin)){
-	    catchBLE();
-	  }else{
-		  HAL_Delay(1000);
-		  // Send a string to the NORDIC UART service, remember to not include the newline
-		  unsigned char test_str[] = "youlostit BLE test";
-		  updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, sizeof(test_str)-1, test_str);
+//  while (1)
+//  {
+//	  if(!nonDiscoverable && HAL_GPIO_ReadPin(BLE_INT_GPIO_Port,BLE_INT_Pin)){
+//	    catchBLE();
+//	  }else{
+//		  HAL_Delay(1000);
+//		  // Send a string to the NORDIC UART service, remember to not include the newline
+//		  unsigned char test_str[] = "youlostit BLE test";
+//		  updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, sizeof(test_str)-1, test_str);
+//	  }
+//	  // Wait for interrupt, only uncomment if low power is needed
+//	  //__WFI();
+//  }
+
+  leds_init();
+
+  i2c_init();
+  lsm6dsl_init();
+
+  timer_init(TIM2);
+  timer_set_ms(TIM2, 50);
+
+  timer_init(TIM3);
+  timer_set_ms(TIM3, 10000);
+
+  while (1) {
+	  if (lost) {
+		  lost_mode();
 	  }
-	  // Wait for interrupt, only uncomment if low power is needed
-	  //__WFI();
+	  else {
+		  catchBLE();
+	  }
+	  for (volatile int i = 0; i< 100000; i++);
   }
 }
 

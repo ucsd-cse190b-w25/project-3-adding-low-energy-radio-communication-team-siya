@@ -1,5 +1,12 @@
-../Core/Src/main.c:38:5:main	48	static
-../Core/Src/main.c:79:6:SystemClock_Config	96	static
-../Core/Src/main.c:124:13:MX_SPI3_Init	8	static
-../Core/Src/main.c:164:13:MX_GPIO_Init	48	static
-../Core/Src/main.c:223:6:Error_Handler	4	static,ignoring_inline_asm
+../Drivers/CMSIS/Include/core_cm4.h:2059:26:ITM_SendChar	16	static,ignoring_inline_asm
+../Core/Src/main.c:72:6:update_transmission_data	4	static
+../Core/Src/main.c:76:5:cycles_to_minutes	4	static
+../Core/Src/main.c:80:6:update_minutes_lost	8	static
+../Core/Src/main.c:86:6:lost_mode	40	static
+../Core/Src/main.c:102:6:TIM2_IRQHandler	24	static
+../Core/Src/main.c:131:5:_write	32	static
+../Core/Src/main.c:144:5:main	16	static
+../Core/Src/main.c:208:6:SystemClock_Config	96	static
+../Core/Src/main.c:254:13:MX_SPI3_Init	8	static
+../Core/Src/main.c:294:13:MX_GPIO_Init	48	static
+../Core/Src/main.c:353:6:Error_Handler	4	static,ignoring_inline_asm
