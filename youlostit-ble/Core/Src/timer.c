@@ -31,8 +31,8 @@ void timer_init(TIM_TypeDef *timer) {
     NVIC_SetPriority(TIM2_IRQn, 1);
 
     // Step 4:
-    // Prescaler for a 1 kHz clock (4 MHz / 4000)
-    timer->PSC = 3999;  // Prescaler is off by 1 because it’s 0-based
+    // Prescaler for a 1 kHz clock (8 MHz / 8000)
+    timer->PSC = 7999;  // Prescaler is off by 1 because it’s 0-based
 
     // Step 5:
     // Enable the timer

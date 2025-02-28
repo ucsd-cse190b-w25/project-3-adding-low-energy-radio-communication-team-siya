@@ -48,77 +48,52 @@ SPI_HandleTypeDef hspi3;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_SPI3_Init(void);
-
-#define CTRL1_XL      0x10
 #define THRESHOLD 1000000  // Min amount of change detected to be considered moving
-#define TIME_LIMIT 1200		// Set to 1200 so results in 1 minute taking into account a cycle is 50ms
-
-
-#if !defined(__SOFT_FP__) && defined(__ARM_FP)
-  #warning "FPU is not initialized, but the project is compiling for an FPU. Please initialize the FPU before use."
-#endif
-volatile uint8_t bit_index = 0;
-volatile uint8_t min_lost = 0;
-volatile uint16_t transmission_data[2] = {0x99, 0x23D5}; // Preamble + Student ID
-volatile uint8_t data_set_index = 0;
+#define TIME_LIMIT 600  // 1 minute (50ms * 1200 cycles)
+#define LOST_MODE_DELAY 200 // 10 seconds (50ms * 200 cycles)
 
 volatile int cycles_still = 0;
 volatile bool lost = false;
-
+volatile int lost_mode_counter = 0;
 int16_t x, y, z;
-int16_t px, py, pz; // Previous accelerometer values
+int16_t px, py, pz;
+volatile uint8_t min_lost = 0;
+volatile uint16_t transmission_data[2] = {0x99, 0x23D5};
 
-// Concenates minutes the device has been in lost mode to the transmission to be displayed
 void update_transmission_data() {
-    transmission_data[1] = (0x23D5 & 0xFF00) | (min_lost & 0x00FF); // Preserve ID, update minutes lost
+    transmission_data[1] = (0x23D5 & 0xFF00) | (min_lost & 0x00FF);
 }
 
-int cycles_to_minutes() {
-    return cycles_still / TIME_LIMIT;
-}
-
-void update_minutes_lost() {
-    min_lost = cycles_to_minutes();
-    update_transmission_data();
-}
-
-// Displaying pattern on LED lights when in lost mode
 void lost_mode() {
-//    uint8_t current_bits = (transmission_data[data_set_index] >> (14 - (bit_index * 2))) & 0x03;
-//    leds_set(current_bits);
-//
-//    bit_index++;
-//    if (bit_index >= 8) {
-//        bit_index = 0;
-//        data_set_index = (data_set_index + 1) % 2;
-//    }
-	if(cycles_still/20 % 10 == 0){
-		unsigned char test_str[] = "You are lost";
-		updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, sizeof(test_str)-1, test_str);
-	}
-
+    if (lost_mode_counter >= LOST_MODE_DELAY) {
+        char test_str[] = "Lost mode received";  // Ensure enough space for the message and number
+        updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, sizeof(test_str) - 1, (unsigned char*)test_str);
+        lost_mode_counter = 0;
+    }
 }
+
 
 void TIM2_IRQHandler() {
     if (TIM2->SR & TIM_SR_UIF) {
         TIM2->SR &= ~TIM_SR_UIF;
-
         lsm6dsl_read_xyz(&x, &y, &z);
-
-        // Setting variance of x,y,z values
         int vx = (x - px) * (x - px);
         int vy = (y - py) * (y - py);
         int vz = (z - pz) * (z - pz);
 
         if (vx < THRESHOLD && vy < THRESHOLD && vz < THRESHOLD) {
             cycles_still++;
-            if (cycles_still > TIME_LIMIT) {
+            if (cycles_still >= TIME_LIMIT) {
                 lost = true;
-                update_minutes_lost();
+//                min_lost = cycles_still / TIME_LIMIT;
+//                if(cycles_still == TIME_LIMIT)
+//                	timer_reset(TIM2);
+                lost_mode_counter++;
             }
         } else {
             cycles_still = 0;
             lost = false;
+            lost_mode_counter = 0;
         }
 
         px = x;
@@ -127,78 +102,35 @@ void TIM2_IRQHandler() {
     }
 }
 
-// Redefine the libc _write() function so you can use printf in your code
-int _write(int file, char *ptr, int len) {
-	int i = 0;
-	for (i = 0; i < len; i++) {
-		ITM_SendChar(*ptr++);
-	}
-	return len;
+
+int main(void) {
+    HAL_Init();
+    SystemClock_Config();
+    MX_GPIO_Init();
+    MX_SPI3_Init();
+    HAL_GPIO_WritePin(BLE_RESET_GPIO_Port, BLE_RESET_Pin, GPIO_PIN_RESET);
+    HAL_Delay(10);
+    HAL_GPIO_WritePin(BLE_RESET_GPIO_Port, BLE_RESET_Pin, GPIO_PIN_SET);
+    ble_init();
+    HAL_Delay(10);
+
+    leds_init();
+
+    i2c_init();
+    lsm6dsl_init();
+
+    timer_init(TIM2);
+    timer_set_ms(TIM2, 50);
+
+    while (1) {
+        if (lost) {
+            lost_mode();
+        } else {
+            catchBLE();
+        }
+    }
 }
 
-
-/**
-  * @brief  The application entry point.
-  * @retval int
-  */
-int main(void)
-{
-  /* Reset of all peripherals, Initializes the Flash interface and the Systick. */
-  HAL_Init();
-
-  /* Configure the system clock */
-  SystemClock_Config();
-
-  /* Initialize all configured peripherals */
-  MX_GPIO_Init();
-  MX_SPI3_Init();
-
-  //RESET BLE MODULE
-  HAL_GPIO_WritePin(BLE_RESET_GPIO_Port,BLE_RESET_Pin,GPIO_PIN_RESET);
-  HAL_Delay(10);
-  HAL_GPIO_WritePin(BLE_RESET_GPIO_Port,BLE_RESET_Pin,GPIO_PIN_SET);
-
-  ble_init();
-
-  HAL_Delay(10);
-
-  uint8_t nonDiscoverable = 0;
-
-//  while (1)
-//  {
-//	  if(!nonDiscoverable && HAL_GPIO_ReadPin(BLE_INT_GPIO_Port,BLE_INT_Pin)){
-//	    catchBLE();
-//	  }else{
-//		  HAL_Delay(1000);
-//		  // Send a string to the NORDIC UART service, remember to not include the newline
-//		  unsigned char test_str[] = "youlostit BLE test";
-//		  updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, sizeof(test_str)-1, test_str);
-//	  }
-//	  // Wait for interrupt, only uncomment if low power is needed
-//	  //__WFI();
-//  }
-
-  leds_init();
-
-  i2c_init();
-  lsm6dsl_init();
-
-  timer_init(TIM2);
-  timer_set_ms(TIM2, 50);
-
-  timer_init(TIM3);
-  timer_set_ms(TIM3, 10000);
-
-  while (1) {
-	  if (lost) {
-		  lost_mode();
-	  }
-	  else {
-		  catchBLE();
-	  }
-	  for (volatile int i = 0; i< 100000; i++);
-  }
-}
 
 /**
   * @brief System Clock Configuration
