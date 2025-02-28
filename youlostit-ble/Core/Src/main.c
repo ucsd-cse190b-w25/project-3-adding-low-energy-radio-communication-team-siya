@@ -23,6 +23,8 @@
 
 #include <stdlib.h>
 
+#include <string.h>
+
 #include <stdint.h>
 #include <stdio.h>
 #include <stdbool.h>
@@ -48,8 +50,8 @@ SPI_HandleTypeDef hspi3;
 void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_SPI3_Init(void);
-#define THRESHOLD 1000000  // Min amount of change detected to be considered moving
-#define TIME_LIMIT 600  // 1 minute (50ms * 1200 cycles)
+#define THRESHOLD 1000000  // Min amount of change detected to be considered moving (set to 1,000,000)
+#define TIME_LIMIT 1200  // 1 minute (50ms * 1200 cycles)
 #define LOST_MODE_DELAY 200 // 10 seconds (50ms * 200 cycles)
 
 volatile int cycles_still = 0;
@@ -59,18 +61,40 @@ int16_t x, y, z;
 int16_t px, py, pz;
 volatile uint8_t min_lost = 0;
 volatile uint16_t transmission_data[2] = {0x99, 0x23D5};
+volatile bool discoverable = true;
+
+
 
 void update_transmission_data() {
     transmission_data[1] = (0x23D5 & 0xFF00) | (min_lost & 0x00FF);
 }
 
+//void lost_mode() {
+//    if (lost_mode_counter >= LOST_MODE_DELAY) {
+//    	// Convert cycles still from 50ms cycles to seconds and subtract the minute it takes to get to lost mode
+//        int seconds = (cycles_still * 50) / 1000 - 59;
+//        char test_str[] = "SiyaTag missing for ";  // Ensure enough space for the message and number
+//        updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, sizeof(test_str) - 1, (unsigned char*)test_str);
+//        lost_mode_counter = 0;
+//    }
+//}
+
 void lost_mode() {
     if (lost_mode_counter >= LOST_MODE_DELAY) {
-        char test_str[] = "Lost mode received";  // Ensure enough space for the message and number
-        updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, sizeof(test_str) - 1, (unsigned char*)test_str);
+
+    	char test_str[] = "SiyaTag missing for ";  // Ensure enough space for the message and number
+    	        updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, sizeof(test_str) - 1, (unsigned char*)test_str);
+
+        char secs_str[50];  // Ensure enough space for the message
+ 	  //Convert cycles still from 50ms cycles to seconds and subtract the minute it takes to get to lost mode
+        int seconds = (cycles_still * 50) / 1000 - 59;
+        sprintf(secs_str, "%d secs", seconds);
+        updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, strlen(secs_str), (unsigned char*)secs_str);
         lost_mode_counter = 0;
     }
 }
+
+
 
 
 void TIM2_IRQHandler() {
@@ -121,12 +145,27 @@ int main(void) {
 
     timer_init(TIM2);
     timer_set_ms(TIM2, 50);
+	leds_set(0);
 
     while (1) {
+    	if(/*discoverable && */ HAL_GPIO_ReadPin(BLE_INT_GPIO_Port,BLE_INT_Pin)){
+    	    catchBLE();
+    	}
         if (lost) {
+        	if (!discoverable){
+        		setConnectable();
+        		setDiscoverability(1);
+        		discoverable = true;
+        		leds_set(0);
+        	}
             lost_mode();
         } else {
-            catchBLE();
+        	if (discoverable){
+        		disconnectBLE();
+        		setDiscoverability(0);
+        		discoverable = false;
+        		leds_set(0x11);
+        	}
         }
     }
 }
