@@ -69,21 +69,11 @@ void update_transmission_data() {
     transmission_data[1] = (0x23D5 & 0xFF00) | (min_lost & 0x00FF);
 }
 
-//void lost_mode() {
-//    if (lost_mode_counter >= LOST_MODE_DELAY) {
-//    	// Convert cycles still from 50ms cycles to seconds and subtract the minute it takes to get to lost mode
-//        int seconds = (cycles_still * 50) / 1000 - 59;
-//        char test_str[] = "SiyaTag missing for ";  // Ensure enough space for the message and number
-//        updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, sizeof(test_str) - 1, (unsigned char*)test_str);
-//        lost_mode_counter = 0;
-//    }
-//}
-
 void lost_mode() {
     if (lost_mode_counter >= LOST_MODE_DELAY) {
 
     	char test_str[] = "SiyaTag missing for ";  // Ensure enough space for the message and number
-    	        updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, sizeof(test_str) - 1, (unsigned char*)test_str);
+    	updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, sizeof(test_str) - 1, (unsigned char*)test_str);
 
         char secs_str[50];  // Ensure enough space for the message
  	  //Convert cycles still from 50ms cycles to seconds and subtract the minute it takes to get to lost mode
@@ -109,9 +99,6 @@ void TIM2_IRQHandler() {
             cycles_still++;
             if (cycles_still >= TIME_LIMIT) {
                 lost = true;
-//                min_lost = cycles_still / TIME_LIMIT;
-//                if(cycles_still == TIME_LIMIT)
-//                	timer_reset(TIM2);
                 lost_mode_counter++;
             }
         } else {
