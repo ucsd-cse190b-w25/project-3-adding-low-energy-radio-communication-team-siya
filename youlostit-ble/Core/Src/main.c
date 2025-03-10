@@ -51,7 +51,7 @@ void SystemClock_Config(void);
 static void MX_GPIO_Init(void);
 static void MX_SPI3_Init(void);
 #define THRESHOLD 1000000  // Min amount of change detected to be considered moving (set to 1,000,000)
-#define TIME_LIMIT 1200  // 1 minute (50ms * 1200 cycles)
+#define TIME_LIMIT 400  // 1 minute (50ms * 1200 cycles)
 #define LOST_MODE_DELAY 200 // 10 seconds (50ms * 200 cycles)
 
 volatile int cycles_still = 0;
@@ -125,34 +125,29 @@ int main(void) {
     ble_init();
     HAL_Delay(10);
 
-    leds_init();
 
     i2c_init();
     lsm6dsl_init();
 
     timer_init(TIM2);
     timer_set_ms(TIM2, 50);
-	leds_set(0);
+	setDiscoverability(0);
 
     while (1) {
-    	if(/*discoverable && */ HAL_GPIO_ReadPin(BLE_INT_GPIO_Port,BLE_INT_Pin)){
+    	if( HAL_GPIO_ReadPin(BLE_INT_GPIO_Port,BLE_INT_Pin)){
     	    catchBLE();
     	}
         if (lost) {
-        	if (!discoverable){
-        		setConnectable();
-        		setDiscoverability(1);
-        		discoverable = true;
-        		leds_set(0);
-        	}
+          setConnectable();
+          setDiscoverability(1);
+          discoverable = true;
+
             lost_mode();
         } else {
-        	if (discoverable){
-        		disconnectBLE();
-        		setDiscoverability(0);
-        		discoverable = false;
-        		leds_set(0x11);
-        	}
+          disconnectBLE();
+          setDiscoverability(0);
+          discoverable = false;
+
         }
     }
 }
