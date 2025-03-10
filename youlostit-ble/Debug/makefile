@@ -60,8 +60,8 @@ all: main-build
 main-build: youlostit-ble.elf secondary-outputs
 
 # Tool invocations
-youlostit-ble.elf youlostit-ble.map: $(OBJS) $(USER_OBJS) /Users/uliyaahdionisio/Desktop/Wireless\ Emb.\ Syst./project-3-adding-low-energy-radio-communication-team-siya/youlostit-ble/STM32L475VGTX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
-	arm-none-eabi-gcc -o "youlostit-ble.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"/Users/uliyaahdionisio/Desktop/Wireless Emb. Syst./project-3-adding-low-energy-radio-communication-team-siya/youlostit-ble/STM32L475VGTX_FLASH.ld" --specs=nosys.specs -Wl,-Map="youlostit-ble.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
+youlostit-ble.elf youlostit-ble.map: $(OBJS) $(USER_OBJS) /Users/sierramyers/project-3-adding-low-energy-radio-communication-team-siya/youlostit-ble/STM32L475VGTX_FLASH.ld makefile objects.list $(OPTIONAL_TOOL_DEPS)
+	arm-none-eabi-gcc -o "youlostit-ble.elf" @"objects.list" $(USER_OBJS) $(LIBS) -mcpu=cortex-m4 -T"/Users/sierramyers/project-3-adding-low-energy-radio-communication-team-siya/youlostit-ble/STM32L475VGTX_FLASH.ld" --specs=nosys.specs -Wl,-Map="youlostit-ble.map" -Wl,--gc-sections -static --specs=nano.specs -mfpu=fpv4-sp-d16 -mfloat-abi=hard -mthumb -Wl,--start-group -lc -lm -Wl,--end-group
 	@echo 'Finished building target: $@'
 	@echo ' '
 
