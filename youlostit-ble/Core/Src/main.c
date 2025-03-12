@@ -57,8 +57,8 @@ static void MX_SPI3_Init(void);
 volatile int cycles_still = 0;
 volatile bool lost = false;
 volatile int lost_mode_counter = 0;
-int16_t x, y, z;
-int16_t px, py, pz;
+volatile int16_t x, y, z;
+volatile int16_t px, py, pz;
 volatile uint8_t min_lost = 0;
 volatile uint16_t transmission_data[2] = {0x99, 0x23D5};
 volatile bool discoverable = true;
@@ -131,18 +131,23 @@ int main(void) {
 
     timer_init(TIM2);
     timer_set_ms(TIM2, 50);
-	setDiscoverability(0);
+    x = 0;
+	y = 0;
+	z = 0;
+	px = 0;
+	py = 0;
+	pz = 0;
+	//setDiscoverability(0);
 
     while (1) {
-    	if( HAL_GPIO_ReadPin(BLE_INT_GPIO_Port,BLE_INT_Pin)){
+    	if(/*discoverable && */HAL_GPIO_ReadPin(BLE_INT_GPIO_Port,BLE_INT_Pin)){
     	    catchBLE();
     	}
         if (lost) {
-          setConnectable();
+         // setConnectable();
           setDiscoverability(1);
           discoverable = true;
-
-            lost_mode();
+          lost_mode();
         } else {
           disconnectBLE();
           setDiscoverability(0);

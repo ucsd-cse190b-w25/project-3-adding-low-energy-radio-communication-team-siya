@@ -32,7 +32,7 @@ void timer_init(TIM_TypeDef *timer) {
 
     // Step 4:
     // Prescaler for a 1 kHz clock (8 MHz / 8000)
-    timer->PSC = 7999;  // Prescaler is off by 1 because it’s 0-based
+    timer->PSC = 99;  // Prescaler is off by 1 because it’s 0-based
 
     // Step 5:
     // Enable the timer
