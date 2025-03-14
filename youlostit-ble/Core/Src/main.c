@@ -48,11 +48,13 @@ int dataAvailable = 0;
 SPI_HandleTypeDef hspi3;
 
 void SystemClock_Config(void);
+void switch_to_100kHz();
+void switch_to_8MHz();
 static void MX_GPIO_Init(void);
 static void MX_SPI3_Init(void);
 #define THRESHOLD 1000000  // Min amount of change detected to be considered moving (set to 1,000,000)
-#define TIME_LIMIT 400  // 1 minute (50ms * 1200 cycles)
-#define LOST_MODE_DELAY 200 // 10 seconds (50ms * 200 cycles)
+#define TIME_LIMIT 60  // 1 minute (1s * 60 cycles)
+#define LOST_MODE_DELAY 10 // 10 seconds (1s * 10 cycles)
 
 volatile int cycles_still = 0;
 volatile bool lost = false;
@@ -63,33 +65,26 @@ volatile uint8_t min_lost = 0;
 volatile uint16_t transmission_data[2] = {0x99, 0x23D5};
 volatile bool discoverable = true;
 
-
-
 void update_transmission_data() {
     transmission_data[1] = (0x23D5 & 0xFF00) | (min_lost & 0x00FF);
 }
 
 void lost_mode() {
     if (lost_mode_counter >= LOST_MODE_DELAY) {
-
-    	char test_str[] = "SiyaTag missing for ";  // Ensure enough space for the message and number
-    	updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, sizeof(test_str) - 1, (unsigned char*)test_str);
-
+        char test_str[] = "SiyaTag missing for ";  // Ensure enough space for the message and number
+        updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, sizeof(test_str) - 1, (unsigned char*)test_str);
         char secs_str[50];  // Ensure enough space for the message
- 	  //Convert cycles still from 50ms cycles to seconds and subtract the minute it takes to get to lost mode
-        int seconds = (cycles_still * 50) / 1000 - 59;
+        // Convert cycles still from 50ms cycles to seconds and subtract the minute it takes to get to lost mode
+        int seconds = (cycles_still - TIME_LIMIT + 1);
         sprintf(secs_str, "%d secs", seconds);
         updateCharValue(NORDIC_UART_SERVICE_HANDLE, READ_CHAR_HANDLE, 0, strlen(secs_str), (unsigned char*)secs_str);
         lost_mode_counter = 0;
     }
 }
 
-
-
-
-void TIM2_IRQHandler() {
-    if (TIM2->SR & TIM_SR_UIF) {
-        TIM2->SR &= ~TIM_SR_UIF;
+void LPTIM1_IRQHandler() {
+    if (LPTIM1->ISR & LPTIM_ISR_ARRM) {  // Check if Auto-Reload Match flag is set
+        LPTIM1->ICR |= LPTIM_ICR_ARRMCF;  // Clear the ARR match interrupt flag
         lsm6dsl_read_xyz(&x, &y, &z);
         int vx = (x - px) * (x - px);
         int vy = (y - py) * (y - py);
@@ -113,47 +108,70 @@ void TIM2_IRQHandler() {
     }
 }
 
+void stop2_mode(void)
+{
+    // Is this sufficient enough for stop mode? What about setting lpms in 001 in pwr control register, what about setting sleepdeep bit?
+
+    HAL_SuspendTick(); // Stop SysTick to reduce power consumption
+
+    // Set the system to Stop 2 mode (Regulator OFF, Wait for Interrupt)
+   // HAL_PWR_EnterSTOP2Mode(PWR_STOPENTRY_WFI);
+    HAL_PWREx_EnterSTOP2Mode(PWR_STOPENTRY_WFI); //Maybe it is this one
+
+    // System wakes up here after an interrupt
+
+    // Restore system clock after wake-up
+    SystemClock_Config();
+
+    HAL_ResumeTick();
+}
+
+
 
 int main(void) {
     HAL_Init();
     SystemClock_Config();
     MX_GPIO_Init();
     MX_SPI3_Init();
+
     HAL_GPIO_WritePin(BLE_RESET_GPIO_Port, BLE_RESET_Pin, GPIO_PIN_RESET);
     HAL_Delay(10);
     HAL_GPIO_WritePin(BLE_RESET_GPIO_Port, BLE_RESET_Pin, GPIO_PIN_SET);
     ble_init();
     HAL_Delay(10);
-
-
     i2c_init();
     lsm6dsl_init();
 
-    timer_init(TIM2);
-    timer_set_ms(TIM2, 50);
+    timer_init(LPTIM1);  // Using LPTIM1 now
+    timer_set_ms(LPTIM1, 1000);  // Set timer to trigger every 1s
+
     x = 0;
-	y = 0;
-	z = 0;
-	px = 0;
-	py = 0;
-	pz = 0;
-	//setDiscoverability(0);
+    y = 0;
+    z = 0;
+    px = 0;
+    py = 0;
+    pz = 0;
+    setDiscoverability(0);
 
     while (1) {
-    	if(/*discoverable && */HAL_GPIO_ReadPin(BLE_INT_GPIO_Port,BLE_INT_Pin)){
-    	    catchBLE();
-    	}
-        if (lost) {
-         // setConnectable();
-          setDiscoverability(1);
-          discoverable = true;
-          lost_mode();
-        } else {
-          disconnectBLE();
-          setDiscoverability(0);
-          discoverable = false;
-
+        if (discoverable && HAL_GPIO_ReadPin(BLE_INT_GPIO_Port, BLE_INT_Pin)) {
+            catchBLE();
         }
+        if (lost) {
+        	if(!discoverable){
+				setDiscoverability(1);
+				discoverable = true;
+        	}
+        	lost_mode();
+        } else {
+        	if(discoverable){
+                disconnectBLE();
+                setDiscoverability(0);
+                discoverable = false;
+        	}
+        }
+       stop2_mode();
+
     }
 }
 
@@ -203,6 +221,7 @@ void SystemClock_Config(void)
     Error_Handler();
   }
 }
+
 
 /**
   * @brief SPI3 Initialization Function
