@@ -1,52 +1,46 @@
-/*
- * timer.c
- *
- *  Created on: Oct 5, 2023
- *      Author: schulman
- */
-
 #include "timer.h"
 
+void timer_init(LPTIM_TypeDef *timer) {
+    RCC->CIER |= RCC_CIER_LSIRDYIE;	 			// Enable LSI ready interrupt
+    RCC->CSR |= RCC_CSR_LSION;					// Enable LSI oscillator
+    while ((RCC->CSR & RCC_CSR_LSIRDY) == 0);
 
-void timer_init(TIM_TypeDef *timer) {
-    // Enable clock for TIM2
-    RCC->APB1ENR1 |= RCC_APB1ENR1_TIM2EN;
+    RCC->APB1ENR1 |= RCC_APB1ENR1_LPTIM1EN;		// Enable clock for LPTIM1
 
-	// Step 1:
-    // Reset timer
-	timer->CR1 &= ~TIM_CR1_CEN;     // Stop the timer and reset control register
-    timer->SR = 0;	    			// Reset status register
-    timer->CNT = 0;     			// Reset counter
+    RCC->CCIPR &= ~RCC_CCIPR_LPTIM1SEL;			// Clear LPTIM1 clock source bits
+    RCC->CCIPR |= RCC_CCIPR_LPTIM1SEL_0;		// Set LPTIM1SEL to 01 (LSI)
 
-    // Step 2:
-    // Set auto-reload to max initially (will be configured in timer_set_ms)
-    timer->ARR = 0xFFFFFFFF;
+    timer->CR &= ~LPTIM_CR_ENABLE;				// Disable the LPTIM
+    while(LPTIM1->CR & LPTIM_CR_ENABLE);
 
-    // Step 3:
-    // Enable interrupt for update event
-    timer->DIER |= TIM_DIER_UIE;
+    timer->ICR = LPTIM_ICR_CMPMCF | LPTIM_ICR_ARRMCF | LPTIM_ICR_EXTTRIGCF | LPTIM_ICR_CMPOKCF | LPTIM_ICR_ARROKCF | LPTIM_ICR_DOWNCF;
 
-    // Enable TIM2 interrupt in NVIC
-    NVIC_EnableIRQ(TIM2_IRQn);
-    NVIC_SetPriority(TIM2_IRQn, 1);
+    timer->CFGR = 0;	// Default prescaling
 
-    // Step 4:
-    // Prescaler for a 1 kHz clock (8 MHz / 8000)
-    timer->PSC = 99;  // Prescaler is off by 1 because it’s 0-based
+    timer->CNT = 0;		// Reset counter
 
-    // Step 5:
-    // Enable the timer
-    timer->CR1 |= TIM_CR1_CEN;
+    timer->IER |= LPTIM_IER_ARRMIE;				// Enable the interrupt for ARR match
+
+    // Enable LPTIM1 interrupt in NVIC
+    NVIC_SetPriority(LPTIM1_IRQn, 0);
+    NVIC_EnableIRQ(LPTIM1_IRQn);
+
+    timer->CR |= LPTIM_CR_ENABLE;  // Enable LPTIM1
+
+    while(!(LPTIM1->CR & LPTIM_CR_ENABLE));
+
+    LPTIM1->CR |= LPTIM_CR_CNTSTRT;
 }
 
-void timer_reset(TIM_TypeDef *timer) {
+void timer_reset(LPTIM_TypeDef *timer) {
     timer->CNT = 0;  // Reset counter to 0
 }
 
-void timer_set_ms(TIM_TypeDef *timer, uint16_t period_ms) {
+void timer_set_ms(LPTIM_TypeDef *timer, uint16_t period_ms) {
+    timer_reset(timer);
 
-	timer_reset(timer);
+    uint32_t arr_value = ((uint32_t)period_ms * 32);
 
-    // Set the auto-reload value for the desired period (1 kHz clock, so period = ms)
-    timer->ARR = period_ms - 1;
+    // Set the auto-reload value
+    timer->ARR = (uint16_t)arr_value - 1;
 }
